@@ -1,0 +1,343 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - "**"
+  workflow_dispatch:
+    inputs:
+      break_test:
+        description: "Mettre true pour simuler un test cassé (Exercice 2)"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  install-dependencies:
+    name: Install Dependencies
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Install backend dependencies
+        run: |
+          cd backend
+          uv sync --frozen --extra dev
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: "frontend/package-lock.json"
+
+      - name: Install frontend dependencies
+        run: |
+          cd frontend
+          npm ci --legacy-peer-deps
+
+  run-tests:
+    name: Run Tests
+    runs-on: ubuntu-24.04
+    needs: install-dependencies
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: "frontend/package-lock.json"
+
+      - name: Prepare reports folder
+        run: mkdir -p reports/tests
+
+      - name: Set CI break test flag
+        run: |
+          echo "CI_BREAK_TEST=${{ github.event.inputs.break_test || 'false' }}" >> "$GITHUB_ENV"
+
+      - name: Run backend tests (JUnit)
+        run: |
+          cd backend
+          uv sync --frozen --extra dev
+          uv run pytest --junitxml=../reports/tests/backend-junit.xml
+
+      - name: Run frontend tests if available (JUnit)
+        run: |
+          cd frontend
+          npm ci --legacy-peer-deps
+          if npx --yes vitest --version >/dev/null 2>&1; then
+            npx vitest run --reporter=junit --outputFile=../reports/tests/frontend-junit.xml
+          else
+            cat > ../reports/tests/frontend-junit.xml << 'XML'
+<testsuites>
+  <testsuite name="frontend" tests="0" failures="0" skipped="1">
+    <testcase classname="frontend" name="vitest-not-installed">
+      <skipped message="vitest non disponible, tests frontend ignorés"/>
+    </testcase>
+  </testsuite>
+</testsuites>
+XML
+          fi
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: reports/tests/
+          if-no-files-found: warn
+
+  run-linter:
+    name: Run Linter
+    runs-on: ubuntu-24.04
+    needs: run-tests
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: "frontend/package-lock.json"
+
+      - name: Prepare reports folder
+        run: mkdir -p reports/lint
+
+      - name: Lint backend
+        run: |
+          cd backend
+          uv sync --frozen --extra dev
+          uv run ruff check . --output-format json --output-file ../reports/lint/ruff-report.json
+          uv run ruff format --check . | tee ../reports/lint/ruff-format-check.txt
+
+      - name: Lint frontend
+        run: |
+          cd frontend
+          npm ci --legacy-peer-deps
+          npm run lint -- --format json --output-file ../reports/lint/eslint-report.json
+
+      - name: Upload linter report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scan-code-report
+          path: reports/lint/
+          if-no-files-found: warn
+
+  run-security-scan:
+    name: Run Security Scan
+    runs-on: ubuntu-24.04
+    needs: run-linter
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: "frontend/package-lock.json"
+
+      - name: Prepare reports folder
+        run: mkdir -p reports/security
+
+      - name: Backend dependency scan (pip-audit)
+        run: |
+          cd backend
+          uv sync --frozen --extra dev
+          uv run pip install pip-audit bandit
+          uv run pip-audit -f json -o ../reports/security/pip-audit.json
+          uv run bandit -r weather -f json -o ../reports/security/bandit-report.json || true
+
+      - name: Frontend dependency scan (npm audit)
+        run: |
+          cd frontend
+          npm ci --legacy-peer-deps
+          npm audit --json > ../reports/security/npm-audit.json || true
+
+      - name: Trivy filesystem scan (JSON)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: json
+          output: reports/security/trivy-fs.json
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+
+      - name: Trivy SARIF report
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: reports/security/trivy-results.sarif
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+
+      - name: Generate OpenVEX file from Trivy report
+        run: |
+          TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          jq -n \
+            --arg ts "$TS" \
+            --slurpfile trivy reports/security/trivy-fs.json \
+            '{
+              "@context": "https://openvex.dev/ns/v0.2.0",
+              "author": "GitHub Actions CI",
+              "timestamp": $ts,
+              "version": 1,
+              "statements": (
+                ($trivy[0].Results // [])
+                | map(.Vulnerabilities // [])
+                | add
+                | unique_by(.VulnerabilityID + "|" + (.PkgName // ""))
+                | map({
+                    "vulnerability": {"name": .VulnerabilityID},
+                    "products": [{"@id": ((.PkgName // "unknown") + "@" + (.InstalledVersion // "unknown"))}],
+                    "status": "under_investigation",
+                    "timestamp": $ts
+                  })
+              )
+            }' > reports/security/openvex.json
+
+      - name: Upload security reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-report
+          path: |
+            reports/security/trivy-fs.json
+            reports/security/trivy-results.sarif
+
+      - name: Upload dependency and security reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-scan-report
+          path: |
+            reports/security/pip-audit.json
+            reports/security/npm-audit.json
+            reports/security/bandit-report.json
+
+      - name: Upload VEX file
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fichier-vex
+          path: reports/security/openvex.json
+
+  build-docker-image:
+    name: Build Docker Image
+    runs-on: ubuntu-24.04
+    needs: run-security-scan
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [backend, frontend]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image archive
+        uses: docker/build-push-action@v5
+        with:
+          context: ./${{ matrix.service }}
+          push: false
+          tags: local/${{ matrix.service }}:${{ github.sha }}
+          outputs: type=docker,dest=/tmp/${{ matrix.service }}-image.tar
+
+      - name: Upload Docker image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image-${{ matrix.service }}
+          path: /tmp/${{ matrix.service }}-image.tar
+
+  push-to-registry:
+    name: Push to Registry
+    runs-on: ubuntu-24.04
+    if: github.ref == 'refs/heads/main'
+    needs: build-docker-image
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [backend, frontend]
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Normalize image name
+        run: echo "IMAGE_NAME=${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
+      - name: Set image tag
+        run: echo "IMAGE_TAG=${GITHUB_SHA::12}" >> "$GITHUB_ENV"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./${{ matrix.service }}
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.service }}:${{ env.IMAGE_TAG }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.service }}:latest
