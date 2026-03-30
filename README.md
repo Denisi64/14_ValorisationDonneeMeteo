@@ -2,6 +2,8 @@
 
 Projet Data For Good - Saison 14
 
+[![CI](https://github.com/dataforgoodfr/14_ValorisationDonneeMeteo/actions/workflows/ci.yml/badge.svg)](https://github.com/dataforgoodfr/14_ValorisationDonneeMeteo/actions/workflows/ci.yml)
+
 ## Structure du projet
 
 ```

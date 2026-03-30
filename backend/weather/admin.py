@@ -23,21 +23,3 @@ class QuotidienneAdmin(admin.ModelAdmin):
     list_display = ["station", "nom_usuel", "date", "tn", "tx", "rr"]
     list_filter = ["station"]
     ordering = ["-date"]
-
-@admin.register(Quotidienne)
-class QuotidienneAdmin(admin.ModelAdmin):
-    list_display = ["station", "nom_usuel", "date", "tn", "tx", "rr"]
-    list_filter = ["station"]
-    ordering = ["-date"]
-
-@admin.register(Quotidienne)
-class QuotidienneAdmin(admin.ModelAdmin):
-    list_display = ["station", "nom_usuel", "date", "tn", "tx", "rr"]
-    list_filter = ["station"]
-    ordering = ["-date"]
-
-@admin.register(Quotidienne)
-class QuotidienneAdmin(admin.ModelAdmin):
-    list_display = ["station", "nom_usuel", "date", "tn", "tx", "rr"]
-    list_filter = ["station"]
-    ordering = ["-date"]
