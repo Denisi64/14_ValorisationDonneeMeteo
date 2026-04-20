@@ -9,12 +9,14 @@ from drf_spectacular.views import (
     SpectacularRedocView,
     SpectacularSwaggerView,
 )
+from weather.views import MetricsView
 
 urlpatterns = [
     # Admin
     path("admin/", admin.site.urls),
     # API v1
     path("api/v1/", include("weather.urls")),
+    path("metrics/", MetricsView.as_view(), name="metrics"),
     # OpenAPI schema and documentation
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path(

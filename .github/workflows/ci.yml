@@ -149,6 +149,9 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci --legacy-peer-deps
 
+      - name: Install frontend build peer dependencies
+        run: npm install --no-save --package-lock=false --legacy-peer-deps --no-audit --no-fund pinia@3.0.4 vue-echarts@8.0.1 echarts@6.0.0
+
       - name: Prepare report directories
         run: |
           mkdir -p reports/test-report reports/scan-code-report
@@ -222,6 +225,10 @@ jobs:
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci --legacy-peer-deps
+
+      - name: Install frontend audit peer dependencies
+        working-directory: frontend
+        run: npm install --no-save --package-lock=false --legacy-peer-deps --no-audit --no-fund pinia@3.0.4 vue-echarts@8.0.1 echarts@6.0.0
 
       - name: Prepare security report directories
         run: |
