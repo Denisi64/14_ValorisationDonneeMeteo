@@ -2,6 +2,11 @@
 
 Projet Data For Good - Saison 14
 
+[![CI](https://github.com/dataforgoodfr/14_ValorisationDonneeMeteo/actions/workflows/ci.yml/badge.svg)](https://github.com/dataforgoodfr/14_ValorisationDonneeMeteo/actions/workflows/ci.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/dataforgoodfr/14_ValorisationDonneeMeteo/badge)](https://scorecard.dev/viewer/?uri=github.com/dataforgoodfr/14_ValorisationDonneeMeteo)
+
+Rendu exercice CI/CD : [rendu exo pipeline creation](rendu%20exo%20pipeline%20creation/README.md)
+
 ## Structure du projet
 
 ```
@@ -15,6 +20,29 @@ Consultez les README de chaque sous-projet :
 
 - [Backend](backend/README.md)
 - [Frontend](frontend/README.md)
+
+## Observabilité locale
+
+Prometheus est disponible en local sur `http://localhost:9090`.
+Grafana est disponible en local sur `http://localhost:3000` avec `admin` / `admin`.
+
+Targets configurées :
+
+- `localhost:9090` pour Prometheus lui-même
+- `backend:8000` avec le chemin `/metrics/` pour les métriques Django exposées dans le réseau Docker
+
+## Images Docker hardened
+
+Les Dockerfiles backend et frontend sont utilisables tels quels avec les images officielles publiques.
+Ils acceptent aussi des bases Docker Hardened Images via variables de build après authentification à `dhi.io` :
+
+```bash
+docker login dhi.io
+PYTHON_BASE_IMAGE=dhi.io/python:3.12.12-debian13-fips-dev \
+NODE_BUILD_IMAGE=dhi.io/node:24-alpine3.22-dev \
+NODE_RUNTIME_IMAGE=dhi.io/node:24-alpine3.22-dev \
+docker compose -f docker-compose.dev.yml build
+```
 
 ## Contribuer
 

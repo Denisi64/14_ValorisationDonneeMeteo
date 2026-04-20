@@ -2,7 +2,9 @@
 DRF ViewSets for weather data API endpoints.
 """
 
+from django.http import HttpResponse
 from drf_spectacular.utils import extend_schema, extend_schema_view
+from prometheus_client import CONTENT_TYPE_LATEST, REGISTRY, generate_latest
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -176,3 +178,16 @@ class NationalIndicatorAPIView(APIView):
         out.is_valid(raise_exception=True)
 
         return Response(out.data, status=status.HTTP_200_OK)
+
+
+class MetricsView(APIView):
+    """
+    Exposes Prometheus metrics for the local observability stack.
+    """
+
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request):
+        metrics = generate_latest(REGISTRY)
+        return HttpResponse(metrics, content_type=CONTENT_TYPE_LATEST)
