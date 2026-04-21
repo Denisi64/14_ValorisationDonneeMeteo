@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       break_test:
-        description: "Force the dedicated CI test to fail"
+        description: "faire fail le test"
         required: false
         default: false
         type: boolean
