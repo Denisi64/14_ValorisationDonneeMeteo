@@ -24,7 +24,7 @@ Consultez les README de chaque sous-projet :
 ## Observabilité locale
 
 Prometheus est disponible en local sur `http://localhost:9090`.
-Grafana est disponible en local sur `http://localhost:3000` avec `admin` / `admin`.
+Grafana est disponible en local sur `http://localhost:3030` avec `admin` / `admin`.
 
 Targets configurées :
 
