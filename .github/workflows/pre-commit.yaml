@@ -1,13 +1,83 @@
-name: pre-commit
+name: CI
 
 on:
   pull_request:
+    branches:
+      - main
+      - develop
   push:
-    branches: [main]
+    branches:
+      - main
+      - develop
+
+permissions:
+  contents: read
+  pull-requests: read
 
 jobs:
-  pre-commit:
+  commitlint:
+    name: Commit message check
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+
+      - name: Install commitlint
+        run: |
+          npm install -g @commitlint/cli @commitlint/config-conventional
+
+      - name: Validate commit messages
+        run: |
+          commitlint --from "${{ github.event.pull_request.base.sha }}" --to "${{ github.event.pull_request.head.sha }}" --verbose
+
+  backend:
+    name: Backend Python
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+          pip install flake8 pytest
+
+      - name: Lint backend
+        run: flake8 .
+
+      - name: Run backend tests
+        run: pytest
+
+  frontend:
+    name: Frontend JS
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: frontend
+
     steps:
     - uses: actions/checkout@v4
     - uses: actions/setup-python@v5
